@@ -39,6 +39,11 @@ app.post('/api/extract-book', upload.single('image'), (req, res) => {
   bookController.extractBook(req, res);
 });
 
+// Demo endpoint that shows the complete flow with mock data
+app.post('/api/extract-book-demo', upload.single('image'), (req, res) => {
+  bookController.extractBookDemo(req, res);
+});
+
 // Error handling middleware
 app.use((error: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (error instanceof multer.MulterError) {

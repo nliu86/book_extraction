@@ -7,3 +7,9 @@ test-images/
 server.log
 test-api.sh
 test-complete.js
+.claude/
+dist/
+node_modules/
+.env
+debug/
+

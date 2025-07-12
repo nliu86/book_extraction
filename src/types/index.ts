@@ -36,3 +36,29 @@ export interface AmazonPageData {
   imageUrls: string[];
   asin?: string;
 }
+
+export interface CompleteExtractionResult {
+  success: boolean;
+  isBook: boolean;
+  bookInfo?: {
+    title: string;
+    author: string;
+    volumeId: string;
+  };
+  classification?: {
+    type: 'fiction' | 'non-fiction';
+    confidence: number;
+    reasoning?: string;
+  };
+  extractedContent?: {
+    page1Content?: string;  // For non-fiction
+    page2Content?: string;  // For fiction
+    actualPageNumber: number; // Which captured page was used
+  };
+  debugInfo?: {
+    totalPagesCaptured: number;
+    contentPagesIdentified: number[];
+  };
+  error?: string;
+  errorType?: 'not_a_book' | 'book_not_found' | 'no_preview' | 'extraction_failed';
+}

@@ -9,7 +9,10 @@
       "Bash(chmod:*)",
       "Bash(node:*)",
       "Bash(pkill:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(grep:*)",
+      "WebFetch(domain:developers.google.com)",
+      "Bash(npm run build:*)"
     ],
     "deny": []
   }

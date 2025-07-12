@@ -7,7 +7,7 @@ A TypeScript-based AI pipeline that extracts text from book pages using cover im
 1. **Book Detection**: Validates if uploaded image contains a book cover
 2. **Metadata Extraction**: Extracts book title and author from cover
 3. **ISBN Search**: Finds ISBN using Google Books and Open Library APIs
-4. **Page Retrieval**: Scrapes Amazon "Look Inside" for book preview pages
+4. **Page Retrieval**: Uses Google Books preview pages via Puppeteer automation
 5. **Text Extraction**: Uses Gemini AI to extract text from page images
 6. **Classification**: Determines if book is fiction or non-fiction
 7. **Smart Return**: Returns page 1 for non-fiction, page 2 for fiction
@@ -16,6 +16,7 @@ A TypeScript-based AI pipeline that extracts text from book pages using cover im
 
 - Node.js 18+ 
 - Google Gemini API key
+- Chrome/Chromium (required for Puppeteer)
 
 ## Installation
 
@@ -100,7 +101,7 @@ The project includes test images in:
 - **Express.js** - Web framework
 - **TypeScript** - Type safety
 - **Google Gemini AI** - Image analysis and text extraction
-- **Puppeteer** - Web scraping
+- **Puppeteer** - Google Books preview automation
 - **Sharp** - Image processing
 - **Multer** - File uploads
 
@@ -108,3 +109,10 @@ The project includes test images in:
 
 - **gemini-2.5-pro** - Complex reasoning (book detection, metadata extraction)
 - **gemini-2.5-flash** - Fast operations (text extraction, classification)
+
+## Limitations
+
+- Books must have preview available on Google Books
+- Some books may have geographic restrictions
+- Preview availability varies by publisher and copyright
+- Google Books rate limiting may apply
