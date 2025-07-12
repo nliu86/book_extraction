@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { VolumeSearchResult } from '../types';
 
 interface GoogleBooksVolume {
   id: string;
@@ -160,6 +161,103 @@ export class GoogleBooksVolumeFinder {
     } catch (error: any) {
       console.error('Error getting volume details:', error.message);
       return null;
+    }
+  }
+
+  async findMultipleVolumes(title: string, author?: string, maxResults: number = 5): Promise<VolumeSearchResult[]> {
+    try {
+      const results: VolumeSearchResult[] = [];
+      
+      // First try with both title and author if author is provided
+      if (author) {
+        const query = `intitle:"${title}" inauthor:"${author}"`;
+        console.log(`Searching with full query: ${query}`);
+        
+        const response = await axios.get<GoogleBooksResponse>(this.apiUrl, {
+          params: {
+            q: query,
+            printType: 'books',
+            maxResults: 10,
+            projection: 'full'
+          }
+        });
+
+        if (response.data.items) {
+          for (const item of response.data.items) {
+            if (item.volumeInfo.previewLink) {
+              results.push({
+                volumeId: item.id,
+                previewLink: item.volumeInfo.previewLink,
+                title: item.volumeInfo.title,
+                authors: item.volumeInfo.authors
+              });
+              if (results.length >= maxResults) return results;
+            }
+          }
+        }
+      }
+
+      // If we don't have enough results, try with title only
+      if (results.length < maxResults) {
+        console.log('Searching with title only...');
+        const response = await axios.get<GoogleBooksResponse>(this.apiUrl, {
+          params: {
+            q: `intitle:"${title}"`,
+            printType: 'books',
+            maxResults: 20,
+            projection: 'full'
+          }
+        });
+
+        if (response.data.items) {
+          // If author provided, prioritize matches with that author
+          if (author) {
+            const authorLower = author.toLowerCase();
+            
+            // First pass: author matches with preview
+            for (const item of response.data.items) {
+              if (!item.volumeInfo.previewLink) continue;
+              
+              const bookAuthors = item.volumeInfo.authors || [];
+              const hasAuthor = bookAuthors.some(a => 
+                a.toLowerCase().includes(authorLower) || 
+                authorLower.includes(a.toLowerCase())
+              );
+              
+              if (hasAuthor && !results.some(r => r.volumeId === item.id)) {
+                results.push({
+                  volumeId: item.id,
+                  previewLink: item.volumeInfo.previewLink,
+                  title: item.volumeInfo.title,
+                  authors: item.volumeInfo.authors
+                });
+                if (results.length >= maxResults) return results;
+              }
+            }
+          }
+
+          // Add any remaining books with preview
+          for (const item of response.data.items) {
+            if (!item.volumeInfo.previewLink) continue;
+            if (!results.some(r => r.volumeId === item.id)) {
+              results.push({
+                volumeId: item.id,
+                previewLink: item.volumeInfo.previewLink,
+                title: item.volumeInfo.title,
+                authors: item.volumeInfo.authors
+              });
+              if (results.length >= maxResults) return results;
+            }
+          }
+        }
+      }
+
+      console.log(`Found ${results.length} volumes with preview`);
+      return results;
+
+    } catch (error: any) {
+      console.error('Error finding multiple volumes:', error.message);
+      return [];
     }
   }
 }

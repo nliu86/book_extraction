@@ -2,7 +2,8 @@ import { BookDetectorService } from './book-detector.service';
 import { GoogleBooksVolumeFinder } from './google-books-volume-finder.service';
 import { GoogleBooksPlaywrightSimpleService } from './google-books-playwright-simple.service';
 import { BookContentAnalyzerService } from './book-content-analyzer.service';
-import { CompleteExtractionResult } from '../types';
+import { BookExtractionEvaluatorService } from './book-extraction-evaluator.service';
+import { CompleteExtractionResult, VolumeSearchResult } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -11,12 +12,16 @@ export class CompleteBookExtractionService {
   private volumeFinder: GoogleBooksVolumeFinder;
   private pageCapture: GoogleBooksPlaywrightSimpleService;
   private contentAnalyzer: BookContentAnalyzerService;
+  private evaluator: BookExtractionEvaluatorService;
+  private maxVolumesToTry: number = 5;
+  private evaluationThreshold: number = 0.8;
 
   constructor() {
     this.bookDetector = new BookDetectorService();
     this.volumeFinder = new GoogleBooksVolumeFinder();
     this.pageCapture = new GoogleBooksPlaywrightSimpleService();
     this.contentAnalyzer = new BookContentAnalyzerService();
+    this.evaluator = new BookExtractionEvaluatorService();
   }
 
   async extractFromImage(imagePathOrBase64: string): Promise<CompleteExtractionResult> {
@@ -59,14 +64,15 @@ export class CompleteBookExtractionService {
         };
       }
 
-      // Step 2: Find volume ID on Google Books
-      console.log('\nStep 2: Finding on Google Books...');
-      const volumeId = await this.volumeFinder.findVolumeIdWithFallback(
+      // Step 2: Find volumes on Google Books
+      console.log('\nStep 2: Finding volumes on Google Books...');
+      const volumes = await this.volumeFinder.findMultipleVolumes(
         bookDetection.title,
-        bookDetection.author
+        bookDetection.author,
+        this.maxVolumesToTry
       );
 
-      if (!volumeId) {
+      if (volumes.length === 0) {
         console.log('❌ Book not found on Google Books');
         return {
           success: false,
@@ -81,78 +87,134 @@ export class CompleteBookExtractionService {
         };
       }
 
-      console.log(`✓ Found volume ID: ${volumeId}`);
+      console.log(`✓ Found ${volumes.length} volumes to try`);
 
-      // Step 3: Capture preview pages
-      console.log('\nStep 3: Capturing preview pages...');
-      let pageImages: string[];
-      
-      try {
-        pageImages = await this.pageCapture.getBookPages(volumeId);
-      } catch (error: any) {
-        console.log('❌ Preview not available');
-        return {
-          success: false,
-          isBook: true,
-          bookInfo: {
-            title: bookDetection.title,
-            author: bookDetection.author,
-            volumeId
-          },
-          error: 'Book preview not available on Google Books',
-          errorType: 'no_preview'
-        };
+      // Step 3: Loop through volumes and try extraction
+      let bestResult: CompleteExtractionResult | null = null;
+      let bestEvaluationScore = 0;
+
+      for (let i = 0; i < volumes.length; i++) {
+        const volume = volumes[i];
+        console.log(`\n=== Trying volume ${i + 1}/${volumes.length} ===`);
+        console.log(`Volume: ${volume.title} by ${volume.authors?.join(', ') || 'Unknown'}`);
+        console.log(`Volume ID: ${volume.volumeId}`);
+
+        try {
+          // Step 3a: Capture preview pages
+          console.log('\nCapturing preview pages...');
+          let pageImages: string[];
+          
+          try {
+            pageImages = await this.pageCapture.getBookPagesFromPreviewLink(volume.previewLink);
+          } catch (error: any) {
+            console.log('❌ Preview capture failed:', error.message);
+            continue; // Try next volume
+          }
+
+          console.log(`✓ Captured ${pageImages.length} pages`);
+
+          // Step 3b: Analyze pages with Gemini Pro
+          console.log('\nAnalyzing content...');
+          
+          // Convert base64 URLs to just base64 data
+          const pagesBase64 = pageImages.map(img => 
+            img.replace(/^data:image\/[a-z]+;base64,/, '')
+          );
+
+          const contentAnalysis = await this.contentAnalyzer.analyzeBookPagesWithFallback(pagesBase64);
+          
+          console.log(`✓ Classification: ${contentAnalysis.classification.type}`);
+          console.log(`  Confidence: ${contentAnalysis.classification.confidence}`);
+          console.log(`  Content pages identified: ${contentAnalysis.contentPages.join(', ')}`);
+          console.log(`  Extracted from page: ${contentAnalysis.extractedText.pageNumber}`);
+
+          // Step 3c: Evaluate extraction quality
+          console.log('\nEvaluating extraction quality...');
+          const evaluation = await this.evaluator.evaluateExtraction(
+            imageBase64,
+            {
+              title: bookDetection.title,
+              author: bookDetection.author,
+              classification: contentAnalysis.classification.type,
+              extractedText: contentAnalysis.extractedText.content,
+              pageNumber: contentAnalysis.extractedText.pageNumber
+            }
+          );
+
+          // Prepare result
+          const result: CompleteExtractionResult = {
+            success: true,
+            isBook: true,
+            bookInfo: {
+              title: bookDetection.title,
+              author: bookDetection.author,
+              volumeId: volume.volumeId
+            },
+            classification: {
+              type: contentAnalysis.classification.type,
+              confidence: contentAnalysis.classification.confidence,
+              reasoning: contentAnalysis.classification.reasoning
+            },
+            extractedContent: {
+              actualPageNumber: contentAnalysis.extractedText.pageNumber
+            },
+            debugInfo: {
+              totalPagesCaptured: pageImages.length,
+              contentPagesIdentified: contentAnalysis.contentPages
+            }
+          };
+
+          // Add appropriate content based on type
+          if (contentAnalysis.classification.type === 'fiction') {
+            result.extractedContent!.page2Content = contentAnalysis.extractedText.content;
+          } else {
+            result.extractedContent!.page1Content = contentAnalysis.extractedText.content;
+          }
+
+          // Check if this is a good result
+          if (evaluation.isValid && evaluation.confidence >= this.evaluationThreshold) {
+            console.log(`\n✅ Extraction validated! Confidence: ${evaluation.confidence}`);
+            console.log('✓ Extraction complete!');
+            return result;
+          } else {
+            console.log(`\n⚠️ Extraction validation failed or below threshold`);
+            console.log(`Valid: ${evaluation.isValid}, Confidence: ${evaluation.confidence}`);
+            if (evaluation.issues) {
+              console.log(`Issues: ${evaluation.issues.join(', ')}`);
+            }
+
+            // Keep best result so far
+            if (evaluation.confidence > bestEvaluationScore) {
+              bestResult = result;
+              bestEvaluationScore = evaluation.confidence;
+            }
+          }
+
+        } catch (error: any) {
+          console.error(`Error processing volume ${volume.volumeId}:`, error.message);
+          continue; // Try next volume
+        }
       }
 
-      console.log(`✓ Captured ${pageImages.length} pages`);
+      // If we get here, no volume passed validation
+      if (bestResult) {
+        console.log('\n⚠️ No volume passed validation threshold');
+        console.log(`Returning best attempt with confidence: ${bestEvaluationScore}`);
+        return bestResult;
+      }
 
-      // Step 4: Analyze pages with Gemini Pro
-      console.log('\nStep 4: Analyzing content with Gemini Pro...');
-      
-      // Convert base64 URLs to just base64 data
-      const pagesBase64 = pageImages.map(img => 
-        img.replace(/^data:image\/[a-z]+;base64,/, '')
-      );
-
-      const contentAnalysis = await this.contentAnalyzer.analyzeBookPagesWithFallback(pagesBase64);
-      
-      console.log(`✓ Classification: ${contentAnalysis.classification.type}`);
-      console.log(`  Confidence: ${contentAnalysis.classification.confidence}`);
-      console.log(`  Content pages identified: ${contentAnalysis.contentPages.join(', ')}`);
-      console.log(`  Extracted from page: ${contentAnalysis.extractedText.pageNumber}`);
-
-      // Prepare result based on book type
-      const result: CompleteExtractionResult = {
-        success: true,
+      // No successful extraction at all
+      return {
+        success: false,
         isBook: true,
         bookInfo: {
           title: bookDetection.title,
           author: bookDetection.author,
-          volumeId
+          volumeId: ''
         },
-        classification: {
-          type: contentAnalysis.classification.type,
-          confidence: contentAnalysis.classification.confidence,
-          reasoning: contentAnalysis.classification.reasoning
-        },
-        extractedContent: {
-          actualPageNumber: contentAnalysis.extractedText.pageNumber
-        },
-        debugInfo: {
-          totalPagesCaptured: pageImages.length,
-          contentPagesIdentified: contentAnalysis.contentPages
-        }
+        error: 'Failed to extract valid content from any available preview',
+        errorType: 'extraction_failed'
       };
-
-      // Add appropriate content based on type
-      if (contentAnalysis.classification.type === 'fiction') {
-        result.extractedContent!.page2Content = contentAnalysis.extractedText.content;
-      } else {
-        result.extractedContent!.page1Content = contentAnalysis.extractedText.content;
-      }
-
-      console.log('\n✓ Extraction complete!');
-      return result;
 
     } catch (error: any) {
       console.error('Unexpected error:', error.message);

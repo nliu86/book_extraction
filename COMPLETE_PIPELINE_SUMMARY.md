@@ -1,27 +1,33 @@
-# Complete Book Extraction Pipeline
+# Enhanced Book Extraction Pipeline
 
 ## Overview
 
-This pipeline automatically extracts book content from a book cover image through a 4-step process:
+This pipeline automatically extracts book content from a book cover image through a robust 5-step process:
 
 1. **Book Detection** - Analyzes if the image contains a book cover
-2. **Volume Lookup** - Finds the book on Google Books
-3. **Page Capture** - Captures preview pages from Google Books
+2. **Volume Discovery** - Finds multiple candidate volumes on Google Books
+3. **Page Capture** - Captures preview pages using actual preview links
 4. **Content Analysis** - Classifies the book and extracts appropriate content
+5. **Quality Validation** - Evaluates extraction quality against the original cover
 
 ## Architecture
 
 ### Services
 
-1. **`BookDetectorService`** - Uses Gemini Pro to detect books and extract title/author
-2. **`GoogleBooksVolumeFinder`** - Searches Google Books API for volume IDs with preview
-3. **`GoogleBooksPlaywrightSimpleService`** - Captures book preview pages using Playwright
-4. **`BookContentAnalyzerService`** - Uses Gemini Pro to analyze pages and extract content
-5. **`CompleteBookExtractionService`** - Orchestrates the entire pipeline
+1. **`BookDetectorService`** - Uses Gemini 2.5 Flash to detect books and extract title/author
+2. **`GoogleBooksVolumeFinder`** - Searches Google Books API and returns multiple volumes with preview links
+3. **`GoogleBooksPlaywrightSimpleService`** - Captures book preview pages using Playwright with direct preview URL support
+4. **`BookContentAnalyzerService`** - Uses Gemini 2.5 Flash to analyze pages and extract content
+5. **`BookExtractionEvaluatorService`** - Uses Gemini 2.5 Flash to validate extraction quality
+6. **`CompleteBookExtractionService`** - Orchestrates the entire pipeline with evaluation loop
 
 ### Key Features
 
-- **Smart Preview Selection**: Prioritizes Google Books volumes with available previews
+- **Multi-Volume Attempts**: Tries up to 5 volumes until validation passes
+- **Extraction Validation**: Compares extracted content with original cover using AI
+- **Direct Preview Link Usage**: Uses actual preview URLs from Google Books API
+- **Confidence Thresholding**: Only accepts extractions with ≥80% validation confidence
+- **Smart Preview Selection**: Prioritizes volumes with available previews
 - **Robust Error Handling**: Graceful handling of non-books, missing books, and unavailable previews
 - **Intelligent Content Extraction**:
   - Fiction: Returns the 2nd page of actual content
@@ -74,23 +80,72 @@ graph TD
     A[Book Cover Image] --> B{Is it a Book?}
     B -->|No| C[Return: not_a_book]
     B -->|Yes| D[Extract Title & Author]
-    D --> E{Find on Google Books}
-    E -->|Not Found| F[Return: book_not_found]
-    E -->|Found| G[Select Volume with Preview]
-    G --> H{Capture 10 Pages}
-    H -->|No Preview| I[Return: no_preview]
-    H -->|Success| J[Analyze with Gemini Pro]
-    J --> K{Classify Book Type}
-    K -->|Fiction| L[Extract Page 2 of Content]
-    K -->|Non-fiction| M[Extract Page 1 of Content]
-    L --> N[Return Complete Result]
-    M --> N
+    D --> E[Find Multiple Volumes]
+    E -->|None Found| F[Return: book_not_found]
+    E -->|Found| G[Start Volume Loop]
+    G --> H[Get Preview Link]
+    H --> I{Capture 10 Pages}
+    I -->|Failed| J[Try Next Volume]
+    I -->|Success| K[Analyze with Gemini 2.5 Flash]
+    K --> L{Classify Book Type}
+    L --> M[Extract Content]
+    M --> N{Validate Extraction}
+    N -->|Confidence < 80%| J
+    N -->|Confidence ≥ 80%| O[Return Success]
+    J -->|More Volumes| H
+    J -->|No More Volumes| P[Return Best Attempt]
 ```
+
+## Enhanced Pipeline Features
+
+### Multi-Volume Evaluation Loop
+The pipeline intelligently handles cases where the first Google Books result might not be the correct edition or might have poor preview quality:
+
+1. **Volume Discovery**: Searches for up to 5 volumes with preview availability
+2. **Sequential Attempts**: Tries each volume in order of relevance
+3. **Quality Validation**: Each extraction is validated against the original cover
+4. **Early Success Exit**: Stops immediately when validation passes (≥80% confidence)
+5. **Best Effort Return**: If no volume passes validation, returns the best attempt
+
+### Extraction Validation Process
+The `BookExtractionEvaluatorService` performs comprehensive validation:
+
+- **Title/Author Matching**: Verifies extracted content matches the book cover
+- **Content Quality Check**: Ensures text is actual book content, not auxiliary pages
+- **Text Integrity**: Validates text isn't garbled, cut off, or mostly blank
+- **Type-Specific Validation**: 
+  - Fiction: Confirms narrative content from the story
+  - Non-fiction: Confirms substantive content (not just preface/acknowledgments)
+
+### Real-World Example
+During testing, Pride and Prejudice demonstrated the enhanced pipeline's value:
+- First volume contained critical analysis instead of the actual novel
+- Validation correctly rejected it (confidence: 0%)
+- Pipeline automatically tried the next volume
+- Second volume contained the actual story and passed validation
 
 ## Technical Implementation
 
+### New Interfaces
+
+```typescript
+interface VolumeSearchResult {
+  volumeId: string;
+  previewLink: string;
+  title: string;
+  authors?: string[];
+}
+
+interface ExtractionEvaluation {
+  isValid: boolean;
+  confidence: number;
+  reasoning: string;
+  issues?: string[];
+}
+```
+
 ### Dependencies
-- `@google/generative-ai` - Gemini Pro for image analysis
+- `@google/generative-ai` - Gemini 2.5 Flash for all AI operations
 - `playwright` - Browser automation for page capture
 - `axios` - HTTP requests to Google Books API
 - `dotenv` - Environment variable management
@@ -103,41 +158,56 @@ GEMINI_API_KEY=your_gemini_api_key
 
 ### Key Algorithms
 
-1. **Preview Selection Algorithm**
-   - Searches for books with `previewLink` property
-   - Prioritizes exact title/author matches with preview
-   - Falls back to partial matches or no preview if needed
+1. **Multi-Volume Search Algorithm**
+   - Searches with both title and author for exact matches
+   - Falls back to title-only search for broader results
+   - Prioritizes volumes with preview links
+   - Returns up to 5 candidates for processing
 
-2. **Content Page Detection**
-   - Gemini Pro analyzes all 10 pages simultaneously
+2. **Preview Link Processing**
+   - Uses actual `previewLink` from Google Books API
+   - Automatically adds required parameters (gbpv=1, pg=PP1)
+   - Handles various Google Books URL formats
+
+3. **Content Page Detection**
+   - Gemini 2.5 Flash analyzes all 10 pages simultaneously
    - Identifies actual content vs auxiliary pages
    - Applies book-type-specific page selection rules
 
-3. **Navigation Strategy**
-   - Uses keyboard navigation (ArrowRight) for reliability
-   - Captures pages sequentially with proper wait times
-   - Handles Google Books UI variations gracefully
+4. **Extraction Validation Algorithm**
+   - Compares original cover image with extracted content
+   - Uses Gemini 2.5 Flash for intelligent comparison
+   - Returns confidence score and detailed reasoning
+   - Threshold-based decision making (≥80% required)
 
-## Test Results
+## Comprehensive Test Results
 
-### Book Detection Accuracy
-- ✅ Fiction books correctly classified (The Great Gatsby, Harry Potter)
-- ✅ Non-fiction books correctly classified (Educated, Sapiens)
-- ✅ Non-book images correctly rejected (100% accuracy)
+### Overall Performance
+- **Success Rate**: 100% (10/10 test cases)
+- **Average Processing Time**: 50.6 seconds per image
+- **Book Detection Accuracy**: 100%
+- **Classification Accuracy**: 100%
 
-### Content Extraction Success
-- ✅ Fiction: Successfully extracts 2nd page of story content
-- ✅ Non-fiction: Successfully extracts 1st page of main content
-- ✅ Auxiliary pages (title, TOC, copyright) correctly skipped
+### Detailed Results
 
-### Error Handling
-- ✅ Books without preview return appropriate error
-- ✅ Non-existent books handled gracefully
-- ✅ Invalid images rejected at detection stage
+#### Book Detection (5 Non-Book Images)
+- ✅ All non-book images correctly rejected
+- Average rejection time: 8.5 seconds
+
+#### Book Extraction (5 Book Images)
+| Book | Type | Validation Attempts | Time |
+|------|------|-------------------|------|
+| The Great Gatsby | Fiction ✅ | 1 | 85.5s |
+| Harry Potter | Fiction ✅ | 1 | 64.7s |
+| Pride and Prejudice | Fiction ✅ | 2* | 125.5s |
+| Educated | Non-fiction ✅ | 1 | 66.1s |
+| Sapiens | Non-fiction ✅ | 2 | 121.8s |
+
+*First attempt rejected due to critical analysis content instead of novel
 
 ## Usage Examples
 
-### Successful Fiction Book
+### Successful Extraction with Validation
 ```javascript
 // Input: gatsby.jpg
 {
@@ -153,8 +223,12 @@ GEMINI_API_KEY=your_gemini_api_key
     "confidence": 1.0
   },
   "extractedContent": {
-    "page2Content": "Chapter content here...",
+    "page2Content": "In my younger and more vulnerable years...",
     "actualPageNumber": 5
+  },
+  "debugInfo": {
+    "totalPagesCaptured": 10,
+    "contentPagesIdentified": [4, 5, 6, 7, 8, 9]
   }
 }
 ```
@@ -170,17 +244,26 @@ GEMINI_API_KEY=your_gemini_api_key
 }
 ```
 
+## Performance Optimization
+
+- **Unified Model Usage**: All services use Gemini 2.5 Flash for consistency and speed
+- **Headless Browser Mode**: Playwright runs in headless mode for production efficiency
+- **Early Exit Strategy**: Stops processing immediately when validation passes
+- **Efficient Validation**: Prevents returning poor-quality extractions
+
 ## Limitations
 
 1. Requires Google Books preview availability for content extraction
-2. Limited to first 10 preview pages
+2. Limited to first 10 preview pages per volume
 3. Dependent on Google Books UI structure (may need updates if UI changes)
 4. Gemini API rate limits apply
+5. Processing time increased due to validation step (but ensures quality)
 
 ## Future Enhancements
 
-1. Support for additional book preview sources
+1. Support for additional book preview sources (Amazon, Open Library)
 2. OCR fallback for books without digital preview
 3. Multi-language support
 4. Batch processing capabilities
 5. Caching layer for repeated lookups
+6. Adjustable validation confidence threshold

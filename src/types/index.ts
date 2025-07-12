@@ -62,3 +62,17 @@ export interface CompleteExtractionResult {
   error?: string;
   errorType?: 'not_a_book' | 'book_not_found' | 'no_preview' | 'extraction_failed';
 }
+
+export interface VolumeSearchResult {
+  volumeId: string;
+  previewLink: string;
+  title: string;
+  authors?: string[];
+}
+
+export interface ExtractionEvaluation {
+  isValid: boolean;
+  confidence: number;
+  reasoning: string;
+  issues?: string[];
+}

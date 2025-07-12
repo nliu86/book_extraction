@@ -58,7 +58,7 @@ IMPORTANT: Return ONLY valid JSON, no additional text or explanation outside the
     try {
       // Use Gemini Pro for analysis
       const response = await this.geminiService.analyzeMultipleImages(
-        'gemini-1.5-pro',
+        'gemini-2.5-flash',
         prompt,
         pageImagesBase64,
         'image/png'

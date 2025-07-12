@@ -30,7 +30,7 @@ export class BookDetectorService {
 
     try {
       const response = await this.geminiService.analyzeImage(
-        'gemini-2.5-pro',
+        'gemini-2.5-flash',
         prompt,
         imageBase64
       );

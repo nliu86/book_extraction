@@ -11,11 +11,39 @@ export class GoogleBooksPlaywrightSimpleService {
   }
 
   async getBookPages(volumeId: string): Promise<string[]> {
+    // Default URL construction for backward compatibility
+    const url = `https://www.google.com/books/edition/_/${volumeId}?hl=en&gbpv=1&pg=PP1`;
+    return this.getBookPagesFromUrl(url);
+  }
+
+  async getBookPagesFromPreviewLink(previewLink: string): Promise<string[]> {
+    // Ensure the preview link has the necessary parameters
+    let url = previewLink;
+    
+    // Add gbpv=1 if not present (enables page view)
+    if (!url.includes('gbpv=')) {
+      url += url.includes('?') ? '&gbpv=1' : '?gbpv=1';
+    }
+    
+    // Add pg=PP1 if not present (start at first page)
+    if (!url.includes('pg=')) {
+      url += '&pg=PP1';
+    }
+    
+    console.log(`Using preview link: ${url}`);
+    return this.getBookPagesFromUrl(url);
+  }
+
+  private async getBookPagesFromUrl(url: string): Promise<string[]> {
     let browser;
     
     try {
+      // Extract volumeId from URL for filename
+      const volumeIdMatch = url.match(/\/edition\/[^\/]*\/([^?]+)/);
+      const volumeId = volumeIdMatch ? volumeIdMatch[1] : 'unknown';
+      
       browser = await chromium.launch({
-        headless: false, // Set to true for production
+        headless: true, // Set to true for production
         args: ['--no-sandbox', '--disable-setuid-sandbox']
       });
 
@@ -24,8 +52,6 @@ export class GoogleBooksPlaywrightSimpleService {
       });
       const page = await context.newPage();
       
-      // Navigate to the book reader
-      const url = `https://www.google.com/books/edition/_/${volumeId}?hl=en&gbpv=1&pg=PP1`;
       console.log(`Navigating to: ${url}`);
       
       await page.goto(url, { 
