@@ -1,5 +1,6 @@
 # Use official Playwright image with Chromium pre-installed
-FROM mcr.microsoft.com/playwright:v1.43.1-jammy
+# Updated to match playwright package version 1.54.1
+FROM mcr.microsoft.com/playwright:v1.54.1-jammy
 
 # Set working directory
 WORKDIR /app
