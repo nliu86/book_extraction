@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: book-extraction-api
+    runtime: docker
+    plan: starter # 512MB RAM, $7/mo
+    # plan: standard # 1GB RAM, $15/mo (if needed)
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: GEMINI_API_KEY
+        sync: false # Set this in Render dashboard for security
+    healthCheckPath: /
+    dockerCommand: node dist/index.js

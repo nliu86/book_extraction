@@ -124,3 +124,60 @@ The system uses a 5-step pipeline:
 3. **Page Capture** - Captures preview pages using Playwright
 4. **Content Analysis** - Classifies book type and extracts content
 5. **Quality Validation** - Ensures extraction matches the original cover
+
+## Deployment
+
+### Deploy to Render (Recommended)
+
+This application is configured for easy deployment to Render.com:
+
+1. **Fork/Clone this repository** to your GitHub account
+
+2. **Sign up for Render** at [render.com](https://render.com)
+
+3. **Create New Web Service**:
+   - Click "New +" → "Web Service"
+   - Connect your GitHub repository
+   - Render will auto-detect the Dockerfile
+
+4. **Configure Service**:
+   - Name: `book-extraction-api` (or your choice)
+   - Plan: Starter ($7/mo) for 512MB RAM
+   - Environment Variables:
+     - `GEMINI_API_KEY`: Your Google Gemini API key
+     - `PORT`: 3000 (optional, Render sets this)
+
+5. **Deploy**: Click "Create Web Service"
+   - First deployment takes 5-10 minutes
+   - Subsequent deployments are faster
+
+### Alternative Deployment Options
+
+**Railway**:
+```bash
+railway login
+railway init
+railway up
+railway domain
+```
+
+**Heroku**:
+```bash
+heroku create your-app-name
+heroku stack:set container
+git push heroku main
+```
+
+**Local Docker**:
+```bash
+docker build -t book-extractor .
+docker run -p 3000:3000 -e GEMINI_API_KEY=your_key book-extractor
+```
+
+### Production Considerations
+
+- The app uses Playwright which requires ~512MB RAM minimum
+- Average processing time is 50+ seconds per request
+- Consider implementing rate limiting for production use
+- Add authentication if exposing publicly
+- Monitor API costs (Gemini API usage)
