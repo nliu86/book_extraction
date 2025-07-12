@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (including dev deps for TypeScript build)
+RUN npm ci
 
 # Copy TypeScript config and source files
 COPY tsconfig.json ./
@@ -17,6 +17,9 @@ COPY public ./public
 
 # Build TypeScript
 RUN npm run build
+
+# Remove dev dependencies after build
+RUN npm prune --production
 
 # Expose port (Render sets PORT env variable)
 EXPOSE 3000
