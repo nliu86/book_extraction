@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSE Test</title>
+</head>
+<body>
+    <h1>SSE Connection Test</h1>
+    <button onclick="testSSE()">Test SSE</button>
+    <div id="output"></div>
+
+    <script>
+        async function testSSE() {
+            const output = document.getElementById('output');
+            output.innerHTML = '<p>Testing SSE connection...</p>';
+            
+            try {
+                // Create a minimal form data with a test image
+                const canvas = document.createElement('canvas');
+                canvas.width = 100;
+                canvas.height = 100;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = 'red';
+                ctx.fillRect(0, 0, 100, 100);
+                
+                canvas.toBlob(async (blob) => {
+                    const formData = new FormData();
+                    formData.append('image', blob, 'test.png');
+                    
+                    console.log('Sending POST request to /api/extract-book-progress');
+                    
+                    const response = await fetch('/api/extract-book-progress', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    console.log('Response status:', response.status);
+                    console.log('Response headers:', response.headers);
+                    console.log('Content-Type:', response.headers.get('content-type'));
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) {
+                            console.log('Stream ended');
+                            break;
+                        }
+                        
+                        const text = decoder.decode(value, { stream: true });
+                        console.log('Received chunk:', text);
+                        buffer += text;
+                        
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    output.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                                } catch (e) {
+                                    console.error('Error parsing SSE data:', e);
+                                }
+                            }
+                        }
+                    }
+                }, 'image/png');
+            } catch (error) {
+                console.error('Error:', error);
+                output.innerHTML += `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

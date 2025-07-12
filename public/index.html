@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Text Extractor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📚 Book Text Extractor</h1>
+            <p class="subtitle">Upload a photo of a book cover to extract text from its first pages</p>
+        </header>
+
+        <main>
+            <!-- Upload Section -->
+            <div class="upload-section">
+                <div id="dropZone" class="drop-zone">
+                    <div class="drop-zone-content">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p class="drop-text">Drag and drop your book cover image here</p>
+                        <p class="drop-subtext">or</p>
+                        <button class="browse-btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+                            Browse Files
+                        </button>
+                        <input type="file" id="fileInput" accept="image/*" hidden>
+                        <p class="file-info">Accepts JPG, PNG, JPEG up to 10MB</p>
+                    </div>
+                    <div id="previewContainer" class="preview-container" style="display: none;">
+                        <img id="previewImage" class="preview-image" alt="Book cover preview">
+                        <button class="remove-btn" onclick="removeImage()">✕</button>
+                    </div>
+                </div>
+                
+                <button id="extractBtn" class="extract-btn" disabled>
+                    Extract Text
+                </button>
+            </div>
+
+            <!-- Loading Section -->
+            <div id="loadingSection" class="loading-section" style="display: none;">
+                <div class="spinner"></div>
+                <p class="loading-text">Analyzing book cover...</p>
+                <p class="loading-subtext">This may take up to 60 seconds</p>
+                <div id="progressUpdates" class="progress-updates"></div>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="results-section" style="display: none;">
+                <div class="result-header">
+                    <h2>Extraction Results</h2>
+                    <button class="copy-btn" onclick="copyText()">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                        </svg>
+                        Copy Text
+                    </button>
+                </div>
+                
+                <div id="bookInfo" class="book-info"></div>
+                
+                <div class="extracted-text-container">
+                    <label for="extractedText">Extracted Text:</label>
+                    <textarea id="extractedText" class="extracted-text" readonly></textarea>
+                </div>
+                
+                <button class="new-upload-btn" onclick="resetUpload()">
+                    Upload Another Book
+                </button>
+            </div>
+
+            <!-- Error Section -->
+            <div id="errorSection" class="error-section" style="display: none;">
+                <div class="error-icon">⚠️</div>
+                <h2 id="errorTitle">Error</h2>
+                <p id="errorMessage"></p>
+                <button class="retry-btn" onclick="resetUpload()">Try Again</button>
+            </div>
+        </main>
+
+        <footer>
+            <div class="instructions">
+                <h3>How it works:</h3>
+                <ul>
+                    <li>Upload a clear photo of a book cover</li>
+                    <li>Our AI will identify the book and find its content</li>
+                    <li>For fiction books, you'll get the 2nd page of content</li>
+                    <li>For non-fiction books, you'll get the 1st page of content</li>
+                </ul>
+            </div>
+            <p class="footer-note">Note: Content availability depends on Google Books preview access</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
